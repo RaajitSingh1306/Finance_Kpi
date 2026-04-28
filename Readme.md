@@ -1,7 +1,7 @@
 # P3 — Finance KPI Pipeline
 
 Automated pipeline that downloads market data for any ticker via Yahoo Finance,
-computes key financial KPIs, generates a 4-panel chart, and saves a combined CSV summary —
+computes key financial KPIs, generates a 4-panel chart, and saves a combined CSV summary 
 triggered by a single command.
 
 ---
