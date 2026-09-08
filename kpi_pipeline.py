@@ -99,6 +99,23 @@ def load_data(ticker: str, start: str, end: str) -> pd.DataFrame:
 # Step 2 — KPI computation
 # ---------------------------------------------------------------------------
 
+def max_drawdown(returns: pd.Series) -> float:
+    wealth = (1 + returns).cumprod()
+    drawdown = wealth / wealth.cummax() - 1
+    return float(drawdown.min())
+
+
+def sortino_ratio(returns: pd.Series, rf: float = 0.065) -> float:
+    excess = returns - rf / 252
+    downside_std = excess[excess < 0].std() * np.sqrt(252)
+    return excess.mean() * 252 / downside_std if downside_std != 0 else np.nan
+
+
+def calmar_ratio(returns: pd.Series, cagr: float) -> float:
+    max_dd = max_drawdown(returns)
+    return cagr / abs(max_dd) if max_dd != 0 else np.nan
+
+
 def calculate_kpis(
     df: pd.DataFrame,
     ticker: str,
@@ -130,6 +147,8 @@ def calculate_kpis(
         if excess_returns.std() > 0
         else float("nan")
     )
+    sortino = sortino_ratio(returns_clean, risk_free_rate)
+    calmar = calmar_ratio(returns_clean, cagr)
 
     rolling_max = close.cummax()
     drawdown    = (close - rolling_max) / rolling_max
@@ -144,14 +163,16 @@ def calculate_kpis(
         "end_price":    round(end_price, 2),
         "cagr_pct":     round(cagr * 100, 2),
         "sharpe":       round(sharpe, 3),
+        "sortino":      round(sortino, 3),
+        "calmar":       round(calmar, 3),
         "max_dd_pct":   round(max_dd * 100, 2),
         "max_dd_date":  max_dd_date.date(),
         "n_years":      round(n_years, 2),
     }
 
     log.info(
-        "      CAGR=%.2f%%  Sharpe=%.3f  MaxDD=%.2f%%",
-        kpis["cagr_pct"], kpis["sharpe"], kpis["max_dd_pct"],
+        "      CAGR=%.2f%%  Sharpe=%.3f  Sortino=%.3f  Calmar=%.3f  MaxDD=%.2f%%",
+        kpis["cagr_pct"], kpis["sharpe"], kpis["sortino"], kpis["calmar"], kpis["max_dd_pct"],
     )
     return kpis, drawdown, excess_returns
 
