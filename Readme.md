@@ -195,7 +195,7 @@ Executing the script automatically populates the `outputs/` directory:
 
 ## Connected Portfolio Projects
 
-* **[Global Market HeatMap](https://github.com/RaajitSingh1306/marketheatmap)**: Scales this KPI engine across 35 Indian and US equities with a live Streamlit and Power BI dashboard.
+* **[Global Market HeatMap](https://github.com/RaajitSingh1306/Global-Equity-Market-Dashboard)**: Scales this KPI engine across 35 Indian and US equities with a live Streamlit and Power BI dashboard.
 * **[Nifty Sector Rotation](https://github.com/RaajitSingh1306/Nifty-Sector-Rotation)**: Applies rolling momentum and volatility KPIs to rank and rebalance across 10 sector indices.
 * **[Volatility Intelligence Platform](https://github.com/RaajitSingh1306/volatility-intelligence-platform)**: Replaces static rolling volatility with conditional GARCH(1,1) econometrics and HMM regime discovery.
 
