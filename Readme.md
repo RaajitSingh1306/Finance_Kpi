@@ -96,6 +96,16 @@ outputs/kpi_summary.csv   outputs/{ticker}_kpi_dashboard.png
 
 ---
 
+## Key Design Decisions
+
+- **252 Trading Days Convention**: Standardized across exchange trading calendars (~250–252 trading days per year); annualization uses `np.sqrt(252)` for standard deviation and `(1 + R)^(252/N) - 1` for annualized returns.
+- **Configurable Risk-Free Benchmark ($R_f$)**: Defaults to 6.5% (reflective of the India 10-Year Benchmark G-Sec yield over the evaluation horizon), with CLI runtime override via `--risk_free` to facilitate comparisons with US Treasury rates.
+- **Log Returns for Volatility and Sharpe**: Uses continuous logarithmic returns for standard deviation estimation ($\sigma_{ann} = \text{std}(\ln(P_t/P_{t-1})) \times \sqrt{252}$), ensuring additivity and statistical stability.
+- **High-Water Mark Peak-to-Trough Drawdown**: Uses cumulative running maximum (`cummax()`) rather than trailing periodic windows to measure absolute capital impairment from lifetime peaks.
+- **Adjusted Close Price Basis**: Consistently utilizes split- and dividend-adjusted closing prices from `yfinance` to prevent artificial structural price drops from skewing return and drawdown calculations.
+
+---
+
 ## Project Directory Layout
 
 ```text
@@ -198,6 +208,23 @@ Executing the script automatically populates the `outputs/` directory:
 * **[Global Market HeatMap](https://github.com/RaajitSingh1306/Global-Equity-Market-Dashboard)**: Scales this KPI engine across 35 Indian and US equities with a live Streamlit and Power BI dashboard.
 * **[Nifty Sector Rotation](https://github.com/RaajitSingh1306/Nifty-Sector-Rotation)**: Applies rolling momentum and volatility KPIs to rank and rebalance across 10 sector indices.
 * **[Volatility Intelligence Platform](https://github.com/RaajitSingh1306/volatility-intelligence-platform)**: Replaces static rolling volatility with conditional GARCH(1,1) econometrics and HMM regime discovery.
+
+---
+
+## Limitations & Roadmap
+
+### Known Limitations
+- **Batch Processing Only**: Designed for batch EOD data ingestion; does not process real-time streaming websocket feeds.
+- **No Multi-Currency Normalization**: Multi-asset runs compare USD and INR equities in their respective local currencies without applying historical FX conversion rates.
+- **Independent Asset Evaluation**: Computes metrics per individual asset; does not calculate asset-to-asset covariance, correlation matrices, or portfolio-level Sharpe ratios.
+- **Fixed Rolling Windows**: Rolling windows (21-day short-term, 63-day medium-term) are static; does not implement regime-adaptive lookback lengths.
+- **Downside Risk Metrics**: Computes standard Sharpe ratio and Max Drawdown; does not calculate asymmetric downside ratios (Sortino ratio, Calmar ratio, Omega ratio).
+
+### Roadmap
+- [ ] **Portfolio-Level Covariance & Sharpe**: Implement Markowitz portfolio weighting, correlation matrices, and portfolio-aggregate Sharpe computation.
+- [ ] **Downside Metrics Suite**: Add Sortino ratio (penalizing downside semi-deviation only) and Calmar ratio (CAGR / Max Drawdown).
+- [ ] **Currency-Adjusted Global Benchmarking**: Integrate historical USD/INR exchange rates to compute unified multi-currency risk-adjusted metrics.
+- [ ] **Automated Daily Cron Refresh**: Package the pipeline as a Docker container scheduled via cron to push updated KPI summaries to S3 or cloud storage.
 
 ---
 
