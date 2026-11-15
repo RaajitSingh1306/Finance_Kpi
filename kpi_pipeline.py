@@ -80,7 +80,7 @@ def parse_args() -> argparse.Namespace:
 def load_data(ticker: str, start: str, end: str) -> pd.DataFrame:
     """Download daily OHLCV and compute simple returns."""
     log.info("[1/4] Downloading %s …", ticker)
-    df = yf.download(ticker, start=start, end=end, progress=False)
+    df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
     if df.empty:
         raise ValueError(f"No data returned for {ticker!r}. Check symbol and date range.")
 
@@ -107,7 +107,7 @@ def max_drawdown(returns: pd.Series) -> float:
 
 def sortino_ratio(returns: pd.Series, rf: float = 0.065) -> float:
     excess = returns - rf / 252
-    downside_std = excess[excess < 0].std() * np.sqrt(252)
+    downside_std = np.sqrt((np.minimum(excess, 0) ** 2).mean()) * np.sqrt(252)
     return excess.mean() * 252 / downside_std if downside_std != 0 else np.nan
 
 
