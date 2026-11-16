@@ -37,7 +37,7 @@ Given one or more asset tickers and a time window, the pipeline:
 
 - **Downloads Adjusted Market Data**: Fetches daily OHLCV via Yahoo Finance and keeps the adjusted `Close` (supporting Indian equities like `RELIANCE.NS`, `TCS.NS`, indices like `^NSEI`, or US equities like `AAPL`, `MSFT`).
 - **Computes Institutional Risk-Return KPIs**:
-  - **CAGR** (Compound Annual Growth Rate) accounting for exact calendar trading days.
+  - **CAGR** (Compound Annual Growth Rate) using calendar days between first and last close (/ 365.25).
   - **Annualized Sharpe Ratio** relative to the Indian 10-Year G-Sec benchmark ($R_f = 6.5\%$) or user-configured rate.
   - **Maximum Drawdown (Max DD)** and peak-to-trough capital impairment from historical high-water marks.
 - **Generates Publication-Quality Visual Diagnostics**: Generates a 4-panel chart per ticker:
@@ -53,7 +53,7 @@ Given one or more asset tickers and a time window, the pipeline:
 
 - **Eliminating Manual Spreadsheet Errors**: Retail investors and analysts frequently miscalculate annualized returns and Sharpe ratios by neglecting compounding, leap trading days, dividend adjustments, or risk-free adjustments.
 - **Consistent Benchmark Comparisons**: Provides a reproducible CLI to compare individual equities against market indices under identical risk-free rate and calendar assumptions.
-- **Automated Batch Processing**: Can process dozens of tickers across multiple sectors in seconds, dumping visual and tabular reports for portfolio screening.
+- **Automated Batch Processing**: Processes any list of tickers sequentially in one command and writes a chart per ticker plus one summary csv.
 - **Foundational Engine**: Acts as the core analytical engine reused in downstream projects like the Global Market HeatMap and Nifty Sector Rotation strategy.
 
 ---
@@ -73,7 +73,7 @@ Given one or more asset tickers and a time window, the pipeline:
 │                                                                        │
 │   yfinance Fetcher: Download daily OHLCV series for each ticker        │
 │   - Split- & dividend-adjusted closing price extraction (`Close`)      │
-│   - Missing date imputation and non-trading day alignment              │
+│   - Rows with missing Close dropped (no imputation)                    │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
                                     ▼
@@ -90,8 +90,8 @@ Given one or more asset tickers and a time window, the pipeline:
 ┌───────────────────────────────────────┐ ┌──────────────────────────────┐
 │       TABULAR EXPORT ENGINE           │ │   VISUAL DASHBOARD ENGINE    │
 │                                       │ │                              │
-│  outputs/kpi_summary_combined.csv     │ │  outputs/{ticker}_kpi_       │
-│  Consolidated multi-asset summary     │ │  dashboard.png (4-Panel)     │
+│  outputs/kpi_summary_combined.csv     │ │  outputs/kpi_report_*.png    │
+│  Consolidated multi-asset summary     │ │  4-panel PNG per ticker      │
 └───────────────────────────────────────┘ └──────────────────────────────┘
 ```
 
@@ -103,9 +103,9 @@ Given one or more asset tickers and a time window, the pipeline:
 | --- | --- | --- | --- |
 | **Python** | `>=3.10` | Core runtime | Standard high-performance scientific programming runtime |
 | **yfinance** | `>=0.2.36` (results produced on 1.2.0) | Market data ingestion | Free, reliable access to global OHLCV history with split/dividend adjustments |
-| **pandas** | `^2.1.0` | Time series manipulation | Fast indexed operations, date slicing, and tabular summaries |
-| **numpy** | `^1.26.0` | Numerical calculations | Vectorized returns, standard deviation, and cumulative operations |
-| **matplotlib** | `^3.8.0` | Diagnostic visual dashboard | Publication-grade 4-panel subplots with custom styling and shading |
+| **pandas** | `>=2.0` | Time series manipulation | Fast indexed operations, date slicing, and tabular summaries |
+| **numpy** | `>=1.24` | Numerical calculations | Vectorized returns, standard deviation, and cumulative operations |
+| **matplotlib** | `>=3.7` | Diagnostic visual dashboard | Publication-grade 4-panel subplots with custom styling and shading |
 | **argparse** | Standard lib | CLI argument parsing | Clean terminal interface with sensible defaults and flags |
 
 ---
@@ -135,7 +135,7 @@ Given one or more asset tickers and a time window, the pipeline:
 6. **High-Water Mark Drawdown**: Compute rolling maximum and drawdowns:
    $$\text{Drawdown}_t = \frac{P_t - \max_{\tau \le t} P_\tau}{\max_{\tau \le t} P_\tau}, \quad \text{Max DD} = \min_t(\text{Drawdown}_t)$$
 7. **Diagnostic Chart Generation**: Render a 4-panel subplot in matplotlib with Price vs CAGR trendline, Drawdown, Rolling Sharpe 252d, and per-year annualised mean daily return (mean x 252).
-8. **Consolidated CSV Export**: Append ticker metrics to `outputs/kpi_summary_combined.csv`.
+8. **Consolidated CSV Export**: Write all ticker metrics (overwriting any previous file) to `outputs/kpi_summary_combined.csv`.
 
 ---
 
@@ -145,7 +145,7 @@ Given one or more asset tickers and a time window, the pipeline:
 | --- | --- | --- |
 | **Yahoo Finance rate limiting** on batch ticker requests | Pipeline stalled mid-execution when fetching multiple tickers sequentially | Implemented sequential per-ticker fetching with dedicated try/except error handling (no automatic retry); the CLI processes tickers one by one with graceful failure isolation so one broken symbol does not crash the run |
 | **Stock splits / dividends creating artificial price drops** | Raw close prices showed massive single-day drops (e.g., 2:1 stock split appearing as -50% crash) that weren't real losses, corrupting return and drawdown calculations | Exclusively used **adjusted close prices** from yfinance (`auto_adjust=True`, which makes `Close` adjusted), which are retroactively corrected for splits and dividend distributions |
-| **Inconsistent trading day counts** across exchanges | Annualization using 252 days was inaccurate for some asset classes and years with fewer sessions | Standardized on the 252-day convention (`np.sqrt(252)`) consistent with institutional practice, and computed CAGR duration from calendar days (first to last date / 365.25) |
+| **Inconsistent trading day counts** across exchanges | Annualization using 252 days was inaccurate for some asset classes and years with fewer sessions | Kept the 252-day convention (`np.sqrt(252)`) for every market (see Limitations) and computed CAGR duration from calendar days (first to last date / 365.25) |
 | **Drawdown calculation errors** with rolling windows | Trailing periodic windows missed the true peak-to-trough decline from lifetime highs | Implemented **high-water mark** peak-to-trough drawdown using `cummax()` to track running maximum, measuring absolute capital impairment from lifetime peaks |
 
 ---
@@ -172,7 +172,7 @@ python kpi_pipeline.py --tickers RELIANCE.NS TCS.NS "^NSEI" --start 2014-01-01 -
 
 | Metric | Formula | Notes |
 | --- | ---- | --- |
-| **CAGR** | $(P_{\text{end}} / P_{\text{start}})^{\frac{1}{\text{years}}} - 1$ | Exact calendar time span calculation |
+| **CAGR** | $(P_{\text{end}} / P_{\text{start}})^{\frac{1}{\text{years}}} - 1$ | Years = calendar days between first and last close / 365.25 |
 | **Sharpe Ratio** | $\dfrac{\overline{r_t - R_f/252}}{\sigma(r_t - R_f/252)} \times \sqrt{252}$ | Daily simple returns; $R_f$ is annual (default 6.5%, India 10Y G-Sec proxy), converted to daily by $/252$ |
 | **Sortino Ratio** | $\dfrac{\overline{e_t}}{\sqrt{\overline{\min(e_t,0)^2}}} \times \sqrt{252}$, $e_t = r_t - R_f/252$ | Downside deviation over all days (target = daily $R_f$) |
 | **Calmar Ratio** | $\text{CAGR} / \lvert \text{Max DD} \rvert$ | Max DD as defined below |
@@ -268,9 +268,9 @@ jupyter notebook main.ipynb
 
 ```csv
 ticker,start_date,end_date,start_price,end_price,cagr_pct,sharpe,sortino,calmar,max_dd_pct,max_dd_date,n_years
-RELIANCE.NS,2014-01-01,2026-02-27,187.47,1387.48,17.9,0.519,0.778,0.397,-45.09,2020-03-23,12.16
+RELIANCE.NS,2014-01-01,2026-02-27,187.47,1387.48,17.9,0.519,0.774,0.397,-45.09,2020-03-23,12.16
 TCS.NS,2014-01-01,2026-02-27,791.73,2574.24,10.19,0.262,0.375,0.253,-40.31,2026-02-24,12.16
-^NSEI,2014-01-02,2026-02-27,6221.15,25178.65,12.19,0.412,0.512,0.317,-38.44,2020-03-23,12.15
+^NSEI,2014-01-02,2026-02-27,6221.15,25178.65,12.19,0.412,0.564,0.317,-38.44,2020-03-23,12.15
 ```
 
 ---
@@ -286,7 +286,7 @@ The pipeline is self-contained and requires no daemon or background server:
   0 16 * * 1-5 /path/to/venv/bin/python /path/to/kpi_pipeline.py --tickers ^NSEI RELIANCE.NS TCS.NS
   ```
 
-- **Docker Containerization**: Easily containerized to push summaries into cloud storage (AWS S3 / Azure Blob).
+- **Docker / cloud upload**: not included (no Dockerfile or S3 upload in this repo; see Roadmap).
 
 ---
 
@@ -304,6 +304,9 @@ The pipeline is self-contained and requires no daemon or background server:
 - **No Currency Normalization**: Multi-asset runs compare USD and INR equities in local currency terms without applying historical FX conversion rates.
 - **Independent Asset Calculation**: Computes metrics per individual asset; does not calculate portfolio covariance matrices or diversified Sharpe ratios.
 - **Downside Risk Metrics**: Computes Sharpe, Sortino, Calmar and Max Drawdown; Omega ratio is not implemented.
+- **Constant risk-free rate**: R_f is a flat 6.5% assumption over the whole window, not the historical 10Y G-Sec yield.
+- **Price index vs adjusted stocks**: `^NSEI` is a price index (dividends excluded) while stock closes are dividend-adjusted, so stock-vs-index comparisons favour the stocks.
+- **252-day convention**: Sharpe and Sortino annualise with 252 days for every market.
 
 ---
 
